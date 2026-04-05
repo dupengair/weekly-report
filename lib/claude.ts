@@ -1,13 +1,17 @@
-import Anthropic from "@anthropic-ai/sdk";
 import type { GitHubCommit } from "./types";
 
-const anthropic = new Anthropic({
-  apiKey: process.env.ANTHROPIC_API_KEY,
-});
-
 export async function generateWeeklySummary(commits: GitHubCommit[]): Promise<string> {
-  if (!process.env.ANTHROPIC_API_KEY) {
-    throw new Error("ANTHROPIC_API_KEY is not configured");
+  const apiKey = process.env.ZHIPUAI_API_KEY;
+  const baseURL = process.env.ZHIPUAI_BASE_URL || "https://ark.cn-beijing.volces.com/api/coding/v3";
+
+  console.log("=== 调试信息 ===");
+  console.log("ZHIPUAI_API_KEY 存在:", !!apiKey);
+  console.log("ZHIPUAI_API_KEY 长度:", apiKey?.length);
+  console.log("ZHIPUAI_BASE_URL:", baseURL);
+  console.log("================");
+
+  if (!apiKey) {
+    throw new Error("ZHIPUAI_API_KEY is not configured");
   }
 
   if (commits.length === 0) {
@@ -18,26 +22,33 @@ export async function generateWeeklySummary(commits: GitHubCommit[]): Promise<st
   const prompt = buildSummaryPrompt(commits);
 
   try {
-    const message = await anthropic.messages.create({
-      model: "claude-3-5-sonnet-20241022",
-      max_tokens: 4096,
-      messages: [
-        {
-          role: "user",
-          content: prompt,
-        },
-      ],
+    const response = await fetch(`${baseURL}/chat/completions`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        model: "GLM-4.7",
+        messages: [
+          {
+            role: "user",
+            content: prompt,
+          },
+        ],
+      }),
     });
 
-    // 提取文本内容
-    const content = message.content
-      .filter((block: any) => block.type === "text")
-      .map((block: any) => block.text)
-      .join("\n");
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`API request failed: ${response.status} ${errorText}`);
+    }
 
-    return content;
+    const data = await response.json();
+    const summary = data.choices?.[0]?.message?.content || "";
+    return summary;
   } catch (error) {
-    console.error("Claude API error:", error);
+    console.error("智谱 AI API error:", error);
     throw error;
   }
 }
@@ -53,7 +64,7 @@ function buildSummaryPrompt(commits: GitHubCommit[]): string {
 ${commitsText}
 
 请按以下结构生成周报：
-1. **概要**（2-3 句话）
+1. ****（2-3 句话）
 2. **主要成就**（要点列表）
 3. **涉及的仓库**
 4. **提交统计**

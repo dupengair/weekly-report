@@ -22,7 +22,7 @@ export async function getUserCommits(
     for (const repo of repos) {
       const commits = await getRepoCommits(
         octokit,
-        username,
+        repo.owner.login,
         repo.name,
         startDate,
         endDate
